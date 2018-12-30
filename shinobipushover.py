@@ -62,7 +62,7 @@ def shinobi_get_videos(monitor, start_datetime):
 	start = start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
 	return shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/videos/{GROUP_KEY}/{monitor}?start={start}")
 
-def notify(monitor, time, shapshot, url):
+def notify(monitor, time, snapshot, url):
 	"""
 	Send a push notification for a given monitor (provide the human-readable name) and
 	timestamp (a datetime), with an image snapshot and a link to the video URL
@@ -103,7 +103,7 @@ def event(monitor):
 
 	snapshot = shinobi_get_binary(f"{INTERNAL_URL}/{API_KEY}/jpeg/{GROUP_KEY}/{monitor}/s.jpg")
 	monitor_name = shinobi_get_monitor_name_by_id(monitor)
-	results = list(process_event(monitor, snapshot, video) for video in videos if video['status'] == 1)
+	results = list(process_event(monitor_name, snapshot, video) for video in videos if video['status'] == 1)
 	return f"{len(results)} videos processed"
 
 if __name__ == "__main__":
