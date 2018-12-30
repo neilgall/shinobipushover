@@ -1,5 +1,9 @@
 FROM frolvlad/alpine-python3
 
+# Install curl for debugging
+RUN apk update
+RUN apk add curl
+
 ENV SHINOBI_EXTERNAL_URL "http://example.com/"
 ENV SHINOBI_INTERNAL_URL "http://localhost:8000"
 ENV SHINOBI_API_KEY "api-key"
