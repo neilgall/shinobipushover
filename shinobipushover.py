@@ -4,7 +4,8 @@ from flask import Flask
 import os
 import requests
 
-BASE_URL = os.getenv("SHINOBI_BASE_URL")
+EXTERNAL_URL = os.getenv("SHINOBI_EXTERNAL_URL")
+INTERNAL_URL = os.getenv("SHINOBI_INTERNAL_URL")
 API_KEY = os.getenv("SHINOBI_API_KEY")
 GROUP_KEY = os.getenv("SHINOBI_GROUP_KEY")
 USER_EMAIL = os.getenv("SHINOBI_USER_EMAIL")
@@ -33,12 +34,12 @@ def shinobi_get_json(*args, **kwargs):
 		raise ConnectionRefusedError(result.text)
 
 def shinobi_get_monitor_name_by_id(id):
-	monitors = shinobi_get_json(f"{BASE_URL}/{API_KEY}/monitor/{GROUP_KEY}")
+	monitors = shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/monitor/{GROUP_KEY}")
 	return next(m["name"] for m in monitors if m["mid"] == id)
 
 def shinobi_get_videos(monitor, start_datetime):
 	start = start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
-	return shinobi_get_json(f"{BASE_URL}/{API_KEY}/videos/{GROUP_KEY}/{monitor}?start={start}")
+	return shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/videos/{GROUP_KEY}/{monitor}?start={start}")
 
 def notify(monitor, time, url):
     response = requests.post('https://api.pushover.net/1/messages.json', params={
@@ -53,13 +54,13 @@ def notify(monitor, time, url):
 
 @application.route("/event/<monitor>")
 def event(monitor):
-	videos = shinobi_get_videos(monitor, datetime.now() - timedelta(minutes=50)).get("videos", [])
+	videos = shinobi_get_videos(monitor, datetime.now() - timedelta(minutes=5)).get("videos", [])
 	if len(videos) == 0:
 		return "No videos"
 	monitor_name = shinobi_get_monitor_name_by_id(monitor)
 	for video in videos:
 		time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
-		action_url = f"{BASE_URL}{video['actionUrl']}"
+		action_url = f"{EXTERNAL_URL}{video['actionUrl']}"
 		notify(monitor_name, time, action_url)
 	return f"{len(videos)} videos"
 

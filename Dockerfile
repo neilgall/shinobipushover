@@ -1,6 +1,7 @@
 FROM frolvlad/alpine-python3
 
-ENV SHINOBI_BASE_URL "http://example.com/"
+ENV SHINOBI_EXTERNAL_URL "http://example.com/"
+ENV SHINOBI_INTERNAL_URL "http://localhost:8000"
 ENV SHINOBI_API_KEY "api-key"
 ENV SHINOBI_GROUP_KEY "group-key"
 ENV SHINOBI_USER_EMAIL "user@example.com"
@@ -17,4 +18,4 @@ COPY shinobipushover.py .
 
 EXPOSE 8000
 
-ENTRYPOINT ["gunicorn", "--bind", "127.0.0.1:8000", "shinobipushover"]
+ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8000", "shinobipushover"]
