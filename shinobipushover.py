@@ -77,20 +77,20 @@ def notify(monitor, time, shapshot, url):
 	})
 	return response.json() if response.status_code < 300 else response.status_code
 
-def process_event(monitor, video):
+def process_event(monitor, snapshot, video):
 	"""
 	Do all processing for a given monitor and video
 	"""
 	time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
 	href = f"{EXTERNAL_URL}{video['href']}"
-	notify(monitor_name, time, href)
+	notify(monitor, time, snapshot, href)
 
 	mark_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
 	shinobi_get_json(mark_read)
 
 
 @application.route("/event/<monitor>")
-def event(monitor, shapshot):
+def event(monitor):
 	"""
 	Shinobi Webhook for a new event. Fetches unwatched videos for the given monitor
 	and sends push notifications for each event.
@@ -101,7 +101,7 @@ def event(monitor, shapshot):
 
 	snapshot = shinobi_get_binary(f"{INTERNAL_URL}/{API_KEY}/jpeg/{GROUP_KEY}/{monitor}/s.jpg")
 	monitor_name = shinobi_get_monitor_name_by_id(monitor)
-	results = (process_event(video) for video in videos if video['status'] == 1)
+	results = (process_event(monitor, snapshot, video) for video in videos if video['status'] == 1)
 	return f"{len(results)} videos processed"
 
 if __name__ == "__main__":
