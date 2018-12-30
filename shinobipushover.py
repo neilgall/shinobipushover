@@ -103,7 +103,7 @@ def event(monitor):
 
 	snapshot = shinobi_get_binary(f"{INTERNAL_URL}/{API_KEY}/jpeg/{GROUP_KEY}/{monitor}/s.jpg")
 	monitor_name = shinobi_get_monitor_name_by_id(monitor)
-	results = (process_event(monitor, snapshot, video) for video in videos if video['status'] == 1)
+	results = list(process_event(monitor, snapshot, video) for video in videos if video['status'] == 1)
 	return f"{len(results)} videos processed"
 
 if __name__ == "__main__":
