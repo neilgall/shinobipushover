@@ -32,6 +32,7 @@ def shinobi_get_json(*args, **kwargs):
 	Attempt a GET request to the Shinobi API. If this fails due to authorisation, a
 	login is performed and the GET is requested again.
 	"""
+	print("GET JSON", *args, **kwargs)
 	result = requests.get(*args, **kwargs).json()
 	if type(result) is not dict or result.get("msg") != "Not Authorized":
 		return result
@@ -44,7 +45,8 @@ def shinobi_get_binary(*args, **kwargs):
 	"""
 	Get data from a Shinobi API with no processing. Must be logged in
 	"""
-	return requests.get(*args, **kwargs).data
+	print("GET binary", *args, **kwargs)
+	return requests.get(*args, **kwargs).content
 
 def shinobi_get_monitor_name_by_id(id):
 	"""
