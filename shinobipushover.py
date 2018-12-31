@@ -30,8 +30,7 @@ class Video:
 	"""
 	Capture the interesting fields from a Video JSON blob
 	"""
-	def __init__(self, monitor, snapshot, video):
-		self.monitor = monitor
+	def __init__(self, snapshot, video):
 		self.snapshot = snapshot
 		self.time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
 		self.href = f"{EXTERNAL_URL}{video['href']}"
@@ -95,6 +94,7 @@ def monitor_by_id(monitor_id):
 	if monitor is None:
 		name = shinobi_get_monitor_name_by_id(monitor_id)
 		monitor = Monitor(id=monitor_id, name=name, last_note=datetime.fromordinal(1))
+		database.session.add(monitor)
 	return monitor
 
 def notify(video, snapshot):
@@ -114,7 +114,7 @@ def notify(video, snapshot):
 	return response.json() if response.status_code < 300 else response.status_code
 
 
-def process_event(video):
+def process_event(monitor, video):
 	"""
 	For a given Video, fetch the snapshot from Shinobi, send the push notification,
 	mark the video as read (so it doesn't get processed again), and update the local
@@ -135,7 +135,7 @@ def event(monitor_id):
 	Shinobi Webhook for a new event. Fetches unwatched videos for the given monitor
 	and sends push notifications for each event.
 	"""
-	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=50)).get("videos", [])
+	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=5)).get("videos", [])
 	if len(videos) == 0:
 		return "No videos"
 
@@ -143,9 +143,9 @@ def event(monitor_id):
 	snapshot = request.args.get("snapshot") or f"/{API_KEY}/jpeg/{GROUP_KEY}/{monitor_id}/s.jpg"
 
 	for video_json in videos:
-		video = Video(monitor, snapshot, video_json)
+		video = Video(snapshot, video_json)
 		if video.is_unread and video.time > monitor.last_note:
-			process_event(video)
+			process_event(monitor, video)
 
 	return "ok"
 
