@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
+import logging
 import os
 import requests
 import sys
@@ -20,6 +21,8 @@ application.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 application.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///notifications.db"
 database = SQLAlchemy(application)
 
+logging.basicConfig(level=logging.INFO)
+
 class Monitor(database.Model):
 	id = database.Column(database.String(30), primary_key=True)
 	name = database.Column(database.String(30))
@@ -30,8 +33,7 @@ class Video:
 	"""
 	Capture the interesting fields from a Video JSON blob
 	"""
-	def __init__(self, snapshot, video):
-		self.snapshot = snapshot
+	def __init__(self, video):
 		self.time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
 		self.href = f"{EXTERNAL_URL}{video['href']}"
 		self.change_to_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
@@ -55,7 +57,7 @@ def shinobi_get_json(*args, **kwargs):
 	Attempt a GET request to the Shinobi API. If this fails due to authorisation, a
 	login is performed and the GET is requested again.
 	"""
-	print("GET JSON", *args, **kwargs)
+	logging.info("GET JSON (args=%s, kwargs=%s)", str(args), str(kwargs))
 	result = requests.get(*args, **kwargs).json()
 	if type(result) is not dict or result.get("msg") != "Not Authorized":
 		return result
@@ -68,7 +70,7 @@ def shinobi_get_binary(*args, **kwargs):
 	"""
 	Get data from a Shinobi API with no processing. Must be logged in
 	"""
-	print("GET binary", *args, **kwargs)
+	logging.info("GET binary (args=%s, kwargs=%s)", str(args), str(kwargs))
 	return requests.get(*args, **kwargs).content
 
 def shinobi_get_monitor_name_by_id(id):
@@ -114,20 +116,6 @@ def notify(monitor, video, snapshot):
 	return response.json() if response.status_code < 300 else response.status_code
 
 
-def process_event(monitor, video):
-	"""
-	For a given Video, fetch the snapshot from Shinobi, send the push notification,
-	mark the video as read (so it doesn't get processed again), and update the local
-	database.
-	"""
-	snapshot = shinobi_get_binary(f"{INTERNAL_URL}{video.snapshot}")
-	notify(monitor, video, snapshot)
-
-	shinobi_get_json(video.change_to_read)
-
-	monitor.last_note = video.time
-
-
 @application.route("/event/<monitor_id>")
 def event(monitor_id):
 	"""
@@ -139,12 +127,16 @@ def event(monitor_id):
 		return "No videos"
 
 	monitor = monitor_by_id(monitor_id)
-	snapshot = request.args.get("snapshot") or f"/{API_KEY}/jpeg/{GROUP_KEY}/{monitor_id}/s.jpg"
+
+	snapshot_path = request.args.get("snapshot") or f"/{API_KEY}/jpeg/{GROUP_KEY}/{monitor_id}/s.jpg"
+	snapshot = shinobi_get_binary(f"{INTERNAL_URL}{snapshot_path}")
 
 	for video_json in videos:
-		video = Video(snapshot, video_json)
+		video = Video(video_json)
 		if video.is_unread and video.time > monitor.last_note:
-			process_event(monitor, video)
+			notify(monitor, video, snapshot)
+			shinobi_get_json(video.change_to_read)
+			monitor.last_note = video.time
 
 	database.session.commit()
 	return "ok"
