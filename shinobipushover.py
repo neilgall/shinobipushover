@@ -126,7 +126,6 @@ def process_event(monitor, video):
 	shinobi_get_json(video.change_to_read)
 
 	monitor.last_note = video.time
-	database.session.commit()
 
 
 @application.route("/event/<monitor_id>")
@@ -147,6 +146,7 @@ def event(monitor_id):
 		if video.is_unread and video.time > monitor.last_note:
 			process_event(monitor, video)
 
+	database.session.commit()
 	return "ok"
 
 
