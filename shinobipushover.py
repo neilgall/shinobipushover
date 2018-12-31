@@ -97,7 +97,7 @@ def monitor_by_id(monitor_id):
 		database.session.add(monitor)
 	return monitor
 
-def notify(video, snapshot):
+def notify(monitor, video, snapshot):
 	"""
 	Send a push notification for a given video
 	"""
@@ -105,7 +105,7 @@ def notify(video, snapshot):
 		'token': PUSHOVER_TOKEN,
 		'user':  PUSHOVER_USER,
 		'title': "Motion alert",
-		'message': f"Motion detected by {video.monitor.name} camera at {video.time.strftime('%H:%M:%S on %d %B %Y')}",
+		'message': f"Motion detected by {monitor.name} camera at {video.time.strftime('%H:%M:%S on %d %B %Y')}",
 		'sound': 'none',
 		'url': video.href
 	}, files={
@@ -121,7 +121,7 @@ def process_event(monitor, video):
 	database.
 	"""
 	snapshot = shinobi_get_binary(f"{INTERNAL_URL}{video.snapshot}")
-	notify(video, snapshot)
+	notify(monitor, video, snapshot)
 
 	shinobi_get_json(video.change_to_read)
 
