@@ -103,7 +103,7 @@ def monitor_by_id(monitor_id):
 
 def load_snapshot_image(path, monitor_id):
 	try:
-		with os.open(path, 'rb') as f:
+		with open(path, 'rb') as f:
 			return f.read()
 	except Exception as e:
 		logging.info("failed to load %s: %s; falling back to current snapshot", path, e)
