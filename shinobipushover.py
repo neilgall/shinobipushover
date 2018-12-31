@@ -7,7 +7,7 @@ import requests
 import sys
 
 EXTERNAL_URL = os.getenv("SHINOBI_EXTERNAL_URL")
-INTERNAL_URL = os.getenv("SHINOBI_INTERNAL_URL")
+INTERNAL_URL = os.getenv("SHINOBI_INTERNAL_URL") or EXTERNAL_URL
 API_KEY = os.getenv("SHINOBI_API_KEY")
 GROUP_KEY = os.getenv("SHINOBI_GROUP_KEY")
 USER_EMAIL = os.getenv("SHINOBI_USER_EMAIL")
@@ -24,6 +24,20 @@ class Monitor(database.Model):
 	id = database.Column(database.String(30), primary_key=True)
 	name = database.Column(database.String(30))
 	last_note = database.Column(database.DateTime)
+
+
+class Video:
+	"""
+	Capture the interesting fields from a Video JSON blob
+	"""
+	def __init__(self, monitor, snapshot, video):
+		self.monitor = monitor
+		self.snapshot = snapshot
+		self.time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
+		self.href = f"{EXTERNAL_URL}{video['href']}"
+		self.change_to_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
+		self.is_unread = video['status'] == 1
+
 
 def shinobi_login():
 	"""
@@ -80,43 +94,38 @@ def monitor_by_id(monitor_id):
 	monitor = Monitor.query.filter_by(id=monitor_id).first()
 	if monitor is None:
 		name = shinobi_get_monitor_name_by_id(monitor_id)
-		monitor = Monitor(monitor_id, name, datetime.from_ordinal(0))
+		monitor = Monitor(id=monitor_id, name=name, last_note=datetime.fromordinal(1))
 	return monitor
 
-def notify(monitor, time, snapshot, url):
+def notify(video, snapshot):
 	"""
-	Send a push notification for a given monitor (provide the human-readable name) and
-	timestamp (a datetime), with an image snapshot and a link to the video URL
+	Send a push notification for a given video
 	"""
 	response = requests.post('https://api.pushover.net/1/messages.json', params={
 		'token': PUSHOVER_TOKEN,
 		'user':  PUSHOVER_USER,
 		'title': "Motion alert",
-		'message': f"Motion detected by {monitor} camera at {time.strftime('%H:%M:%S on %d %B %Y')}",
+		'message': f"Motion detected by {video.monitor.name} camera at {video.time.strftime('%H:%M:%S on %d %B %Y')}",
 		'sound': 'none',
-		'url': url
+		'url': video.href
 	}, files={
 		'attachment': snapshot
 	})
 	return response.json() if response.status_code < 300 else response.status_code
 
 
-def process_event(monitor, snapshot, video):
+def process_event(video):
 	"""
-	For a given monitor and video, fetch the snapshot from Shinobi, send the push notification,
-	mark the video as read (so it doesn't get processed again), and update the local database.
+	For a given Video, fetch the snapshot from Shinobi, send the push notification,
+	mark the video as read (so it doesn't get processed again), and update the local
+	database.
 	"""
-	time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
-	href = f"{EXTERNAL_URL}{video['href']}"
+	snapshot = shinobi_get_binary(f"{INTERNAL_URL}{video.snapshot}")
+	notify(video, snapshot)
 
-	snapshot = shinobi_get_binary(f"{INTERNAL_URL}{snapshot_path}")
+	shinobi_get_json(video.change_to_read)
 
-	notify(monitor, time, snapshot, href)
-
-	mark_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
-	shinobi_get_json(mark_read)
-
-	monitor.last_note = time
+	monitor.last_note = video.time
 	database.session.commit()
 
 
@@ -126,16 +135,17 @@ def event(monitor_id):
 	Shinobi Webhook for a new event. Fetches unwatched videos for the given monitor
 	and sends push notifications for each event.
 	"""
-	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=5)).get("videos", [])
+	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=50)).get("videos", [])
 	if len(videos) == 0:
 		return "No videos"
 
 	monitor = monitor_by_id(monitor_id)
 	snapshot = request.args.get("snapshot") or f"/{API_KEY}/jpeg/{GROUP_KEY}/{monitor_id}/s.jpg"
 
-	for video in videos:
-		if video['status'] == 1 and video['time'] > monitor.last_note:
-			process_event(monitor, snapshot, video)
+	for video_json in videos:
+		video = Video(monitor, snapshot, video_json)
+		if video.is_unread and video.time > monitor.last_note:
+			process_event(video)
 
 	return "ok"
 
