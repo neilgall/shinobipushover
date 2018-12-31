@@ -120,7 +120,7 @@ def process_event(monitor, snapshot, video):
 	database.session.commit()
 
 
-@application.route("/event/<monitor>")
+@application.route("/event/<monitor_id>")
 def event(monitor_id):
 	"""
 	Shinobi Webhook for a new event. Fetches unwatched videos for the given monitor
