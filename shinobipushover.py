@@ -87,6 +87,7 @@ def shinobi_get_videos(monitor, start_datetime):
 	start = start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
 	return shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/videos/{GROUP_KEY}/{monitor}?start={start}")
 
+
 def monitor_by_id(monitor_id):
 	"""
 	Get the Monitor record for a monitor ID. If it does not exist in the database, query the
@@ -98,6 +99,17 @@ def monitor_by_id(monitor_id):
 		monitor = Monitor(id=monitor_id, name=name, last_note=datetime.fromordinal(1))
 		database.session.add(monitor)
 	return monitor
+
+
+def load_snapshot_image(path, monitor_id):
+	try:
+		with os.open(path, 'rb') as f:
+			return f.read()
+	except Exception as e:
+		logging.info("failed to load %s: %s; falling back to current snapshot", path, e)
+		# fallback to a current snapshot from the indicated monitor
+		return shinobi_get_binary(f"{INTERNAL_URL}/{API_KEY}/jpeg/{GROUP_KEY}/{monitor_id}/s.jpg")
+
 
 def notify(monitor, video, snapshot):
 	"""
@@ -128,8 +140,7 @@ def event(monitor_id):
 
 	monitor = monitor_by_id(monitor_id)
 
-	snapshot_path = request.args.get("snapshot") or f"/{API_KEY}/jpeg/{GROUP_KEY}/{monitor_id}/s.jpg"
-	snapshot = shinobi_get_binary(f"{INTERNAL_URL}{snapshot_path}")
+	snapshot = load_snapshot_image(request.args.get("snapshot"), monitor_id)
 
 	for video_json in videos:
 		video = Video(video_json)

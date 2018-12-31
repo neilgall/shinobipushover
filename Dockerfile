@@ -21,6 +21,7 @@ RUN pip install -r requirements.txt
 COPY shinobipushover.py .
 RUN /usr/bin/python3 shinobipushover.py initdb
 
+VOLUME /var/shm/streams
 EXPOSE 8000
 
 ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8000", "shinobipushover"]
