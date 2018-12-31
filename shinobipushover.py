@@ -72,15 +72,15 @@ def shinobi_get_videos(monitor, start_datetime):
 	start = start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
 	return shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/videos/{GROUP_KEY}/{monitor}?start={start}")
 
-def monitor_by_id(id):
+def monitor_by_id(monitor_id):
 	"""
 	Get the Monitor record for a monitor ID. If it does not exist in the database, query the
 	information from the Shinobi API and create the record.
 	"""
 	monitor = Monitor.query.filter_by(id=monitor_id).first()
 	if monitor is None:
-		name = shinobi_get_monitor_name_by_id(id)
-		monitor = Monitor(id, name, datetime.from_ordinal(0))
+		name = shinobi_get_monitor_name_by_id(monitor_id)
+		monitor = Monitor(monitor_id, name, datetime.from_ordinal(0))
 	return monitor
 
 def notify(monitor, time, snapshot, url):
