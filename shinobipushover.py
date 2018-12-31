@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 from datetime import datetime, timedelta
-from flask import Flask
+from flask import Flask, request
+from flask_sqlalchemy import SQLAlchemy
 import os
 import requests
+import sys
 
 EXTERNAL_URL = os.getenv("SHINOBI_EXTERNAL_URL")
 INTERNAL_URL = os.getenv("SHINOBI_INTERNAL_URL")
@@ -14,6 +16,14 @@ PUSHOVER_TOKEN = os.getenv("PUSHOVER_TOKEN")
 PUSHOVER_USER = os.getenv("PUSHOVER_USER")
 
 application = Flask("shinobipushover")
+application.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+application.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///notifications.db"
+database = SQLAlchemy(application)
+
+class Monitor(database.Model):
+	id = database.Column(database.String(30), primary_key=True)
+	name = database.Column(database.String(30))
+	last_note = database.Column(database.DateTime)
 
 def shinobi_login():
 	"""
@@ -62,6 +72,17 @@ def shinobi_get_videos(monitor, start_datetime):
 	start = start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
 	return shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/videos/{GROUP_KEY}/{monitor}?start={start}")
 
+def monitor_by_id(id):
+	"""
+	Get the Monitor record for a monitor ID. If it does not exist in the database, query the
+	information from the Shinobi API and create the record.
+	"""
+	monitor = Monitor.query.filter_by(id=monitor_id).first()
+	if monitor is None:
+		name = shinobi_get_monitor_name_by_id(id)
+		monitor = Monitor(id, name, datetime.from_ordinal(0))
+	return monitor
+
 def notify(monitor, time, snapshot, url):
 	"""
 	Send a push notification for a given monitor (provide the human-readable name) and
@@ -79,32 +100,48 @@ def notify(monitor, time, snapshot, url):
 	})
 	return response.json() if response.status_code < 300 else response.status_code
 
+
 def process_event(monitor, snapshot, video):
 	"""
-	Do all processing for a given monitor and video
+	For a given monitor and video, fetch the snapshot from Shinobi, send the push notification,
+	mark the video as read (so it doesn't get processed again), and update the local database.
 	"""
 	time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
 	href = f"{EXTERNAL_URL}{video['href']}"
+
+	snapshot = shinobi_get_binary(f"{INTERNAL_URL}{snapshot_path}")
+
 	notify(monitor, time, snapshot, href)
 
 	mark_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
 	shinobi_get_json(mark_read)
 
+	monitor.last_note = time
+	database.session.commit()
+
 
 @application.route("/event/<monitor>")
-def event(monitor):
+def event(monitor_id):
 	"""
 	Shinobi Webhook for a new event. Fetches unwatched videos for the given monitor
 	and sends push notifications for each event.
 	"""
-	videos = shinobi_get_videos(monitor, datetime.now() - timedelta(minutes=5)).get("videos", [])
+	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=5)).get("videos", [])
 	if len(videos) == 0:
 		return "No videos"
 
-	snapshot = shinobi_get_binary(f"{INTERNAL_URL}/{API_KEY}/jpeg/{GROUP_KEY}/{monitor}/s.jpg")
-	monitor_name = shinobi_get_monitor_name_by_id(monitor)
-	results = list(process_event(monitor_name, snapshot, video) for video in videos if video['status'] == 1)
-	return f"{len(results)} videos processed"
+	monitor = monitor_by_id(monitor_id)
+	snapshot = request.args.get("snapshot") or f"/{API_KEY}/jpeg/{GROUP_KEY}/{monitor_id}/s.jpg"
+
+	for video in videos:
+		if video['status'] == 1 and video['time'] > monitor.last_note:
+			process_event(monitor, snapshot, video)
+
+	return "ok"
+
 
 if __name__ == "__main__":
-	application.run("0.0.0.0", port=5000, debug=True)
+	if 'initdb' in sys.argv:
+		database.create_all()
+	else:
+		application.run("0.0.0.0", port=5000, debug=True)

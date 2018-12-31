@@ -19,6 +19,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY shinobipushover.py .
+RUN /usr/bin/python3 shinobipushover.py initdb
 
 EXPOSE 8000
 
