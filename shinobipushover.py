@@ -139,12 +139,13 @@ def event(monitor_id):
 		return "No videos"
 
 	monitor = monitor_by_id(monitor_id)
+	earliest_note = monitor.last_note + timedelta(minutes=5)
 
 	snapshot = load_snapshot_image(request.args.get("snapshot"), monitor_id)
 
 	for video_json in videos:
 		video = Video(video_json)
-		if video.is_unread and video.time > monitor.last_note:
+		if video.is_unread and video.time > earliest_note:
 			notify(monitor, video, snapshot)
 			shinobi_get_json(video.change_to_read)
 			monitor.last_note = video.time
