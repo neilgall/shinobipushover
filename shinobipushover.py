@@ -5,6 +5,7 @@ from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 import logging
 import os
+import re
 import requests
 import sys
 
@@ -25,6 +26,11 @@ database = SQLAlchemy(application)
 
 logging.basicConfig(level=logging.INFO)
 
+def utc_strptime(s):
+	# colon was only allowed in timezone offset from Python 3.7
+	safe_tz = re.sub(r'\+(\d+):(\d+)', r'+\1\2', s)
+	return datetime.strptime(safe_tz, "%Y-%m-%dT%H:%M:%S%z").astimezone(tz.tzutc())
+
 class Monitor(database.Model):
 	id = database.Column(database.String(30), primary_key=True)
 	name = database.Column(database.String(30))
@@ -36,7 +42,7 @@ class Video:
 	Capture the interesting fields from a Video JSON blob
 	"""
 	def __init__(self, video):
-		self.time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%S%z").astimezone(tz.tzutc())
+		self.time = utc_strptime(video["time"])
 		self.href = f"{EXTERNAL_URL}{video['href']}"
 		self.change_to_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
 		self.is_unread = video['status'] == 1
