@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from datetime import datetime, timedelta
+from dateutil import tz
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 import logging
@@ -15,6 +16,7 @@ USER_EMAIL = os.getenv("SHINOBI_USER_EMAIL")
 USER_PASS = os.getenv("SHINOBI_USER_PASS")
 PUSHOVER_TOKEN = os.getenv("PUSHOVER_TOKEN")
 PUSHOVER_USER = os.getenv("PUSHOVER_USER")
+TIMEDELTA_MINUTES = os.getenv("TIMEDELTA_MINUTES") or 5
 
 application = Flask("shinobipushover")
 application.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -34,7 +36,7 @@ class Video:
 	Capture the interesting fields from a Video JSON blob
 	"""
 	def __init__(self, video):
-		self.time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%SZ")
+		self.time = datetime.strptime(video["time"], "%Y-%m-%dT%H:%M:%S%z").astimezone(tz.tzutc())
 		self.href = f"{EXTERNAL_URL}{video['href']}"
 		self.change_to_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
 		self.is_unread = video['status'] == 1
@@ -96,7 +98,8 @@ def monitor_by_id(monitor_id):
 	monitor = Monitor.query.filter_by(id=monitor_id).first()
 	if monitor is None:
 		name = shinobi_get_monitor_name_by_id(monitor_id)
-		monitor = Monitor(id=monitor_id, name=name, last_note=datetime.fromordinal(1))
+		zero_time = datetime.fromtimestamp(0).astimezone(tz.tzutc())
+		monitor = Monitor(id=monitor_id, name=name, last_note=zero_time)
 		database.session.add(monitor)
 	return monitor
 
@@ -115,11 +118,12 @@ def notify(monitor, video, snapshot):
 	"""
 	Send a push notification for a given video
 	"""
+	local_time = video.time.astimezone(tz.tzlocal())
 	response = requests.post('https://api.pushover.net/1/messages.json', params={
 		'token': PUSHOVER_TOKEN,
 		'user':  PUSHOVER_USER,
 		'title': "Motion alert",
-		'message': f"Motion detected by {monitor.name} camera at {video.time.strftime('%H:%M:%S on %d %B %Y')}",
+		'message': f"Motion detected by {monitor.name} camera at {local_time.strftime('%H:%M:%S on %d %B %Y')}",
 		'sound': 'none',
 		'url': video.href
 	}, files={
@@ -134,7 +138,7 @@ def event(monitor_id):
 	Shinobi Webhook for a new event. Fetches unwatched videos for the given monitor
 	and sends push notifications for each event.
 	"""
-	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=5)).get("videos", [])
+	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=int(TIMEDELTA_MINUTES))).get("videos", [])
 	if len(videos) == 0:
 		return "No videos"
 
