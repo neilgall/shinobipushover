@@ -31,10 +31,14 @@ def utc_strptime(s):
 	safe_tz = re.sub(r'\+(\d+):(\d+)', r'+\1\2', s)
 	return datetime.strptime(safe_tz, "%Y-%m-%dT%H:%M:%S%z").astimezone(tz.tzutc())
 
+
 class Monitor(database.Model):
 	id = database.Column(database.String(30), primary_key=True)
 	name = database.Column(database.String(30))
 	last_note = database.Column(database.DateTime)
+
+	def earliest_note(self):
+		return (self.last_note + timedelta(minutes=int(TIMEDELTA_MINUTES))).astimezone(tz.tzutc())
 
 
 class Video:
@@ -149,13 +153,11 @@ def event(monitor_id):
 		return "No videos"
 
 	monitor = monitor_by_id(monitor_id)
-	earliest_note = monitor.last_note + timedelta(minutes=5)
-
 	snapshot = load_snapshot_image(request.args.get("snapshot"), monitor_id)
 
 	for video_json in videos:
 		video = Video(video_json)
-		if video.is_unread and video.time > earliest_note:
+		if video.is_unread and video.time > monitor.earliest_note():
 			notify(monitor, video, snapshot)
 			shinobi_get_json(video.change_to_read)
 			monitor.last_note = video.time
