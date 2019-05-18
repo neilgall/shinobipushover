@@ -27,9 +27,7 @@ database = SQLAlchemy(application)
 logging.basicConfig(level=logging.INFO)
 
 def utc_strptime(s):
-	# colon was only allowed in timezone offset from Python 3.7
-	safe_tz = re.sub(r'\+(\d+):(\d+)', r'+\1\2', s)
-	return datetime.strptime(safe_tz, "%Y-%m-%dT%H:%M:%S%z").astimezone(tz.tzutc())
+	return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%z").astimezone(tz.tzutc())
 
 
 class Monitor(database.Model):
@@ -64,6 +62,7 @@ def shinobi_login():
 	}).json()
 	return login.get("ok") == True
 
+
 def shinobi_get_json(*args, **kwargs):
 	"""
 	Attempt a GET request to the Shinobi API. If this fails due to authorisation, a
@@ -78,6 +77,7 @@ def shinobi_get_json(*args, **kwargs):
 	else:
 		raise ConnectionRefusedError(result.text)
 
+
 def shinobi_get_binary(*args, **kwargs):
 	"""
 	Get data from a Shinobi API with no processing. Must be logged in
@@ -85,12 +85,14 @@ def shinobi_get_binary(*args, **kwargs):
 	logging.info("GET binary (args=%s, kwargs=%s)", str(args), str(kwargs))
 	return requests.get(*args, **kwargs).content
 
+
 def shinobi_get_monitor_name_by_id(id):
 	"""
 	Given a monitor ID, fetch its human-readable name
 	"""
 	monitors = shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/monitor/{GROUP_KEY}")
 	return next(m["name"] for m in monitors if m["mid"] == id)
+
 
 def shinobi_get_videos(monitor, start_datetime):
 	"""
@@ -128,7 +130,7 @@ def notify(monitor, video, snapshot):
 	"""
 	Send a push notification for a given video
 	"""
-	local_time = video.time.astimezone(tz.tzlocal())
+	local_time = video.time.astimezone(tz.gettz())
 	response = requests.post('https://api.pushover.net/1/messages.json', params={
 		'token': PUSHOVER_TOKEN,
 		'user':  PUSHOVER_USER,
@@ -142,13 +144,19 @@ def notify(monitor, video, snapshot):
 	return response.json() if response.status_code < 300 else response.status_code
 
 
+def now_minus_timedelta():
+	"""Get the current time minus the configured time delta"""
+	now = datetime.now().astimezone(tz.tzutc())
+	return now - timedelta(minutes=int(TIMEDELTA_MINUTES))
+
+
 @application.route("/event/<monitor_id>")
 def event(monitor_id):
 	"""
 	Shinobi Webhook for a new event. Fetches unwatched videos for the given monitor
 	and sends push notifications for each event.
 	"""
-	videos = shinobi_get_videos(monitor_id, datetime.now() - timedelta(minutes=int(TIMEDELTA_MINUTES))).get("videos", [])
+	videos = shinobi_get_videos(monitor_id, now_minus_timedelta()).get("videos", [])
 	if len(videos) == 0:
 		return "No videos"
 
