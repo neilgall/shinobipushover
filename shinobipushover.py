@@ -49,6 +49,9 @@ class Video:
 		self.change_to_read = f"{INTERNAL_URL}{video['links']['changeToRead']}"
 		self.is_unread = video['status'] == 1
 
+	def __repr__(self):
+		return f"Video@{self.time}{':new' if self.is_unread else ''}"
+
 
 def shinobi_login():
 	"""
@@ -60,6 +63,7 @@ def shinobi_login():
 		"pass": USER_PASS,
 		"function": "dash"
 	}).json()
+	logging.info("Shinobi API login: success=%s", str(login.get("ok"))) 
 	return login.get("ok") == True
 
 
@@ -131,16 +135,20 @@ def notify(monitor, video, snapshot):
 	Send a push notification for a given video
 	"""
 	local_time = video.time.astimezone(tz.gettz())
+	message = f"Motion detected by {monitor.name} camera at {local_time.strftime('%H:%M:%S on %d %B %Y')}"
+
 	response = requests.post('https://api.pushover.net/1/messages.json', params={
 		'token': PUSHOVER_TOKEN,
 		'user':  PUSHOVER_USER,
 		'title': "Motion alert",
-		'message': f"Motion detected by {monitor.name} camera at {local_time.strftime('%H:%M:%S on %d %B %Y')}",
+		'message': message,
 		'sound': 'none',
 		'url': video.href
 	}, files={
 		'attachment': snapshot
 	})
+
+	logging.info("Sent notification '%s' status %d", message, response.status_code)	
 	return response.json() if response.status_code < 300 else response.status_code
 
 
@@ -165,6 +173,7 @@ def event(monitor_id):
 
 	for video_json in videos:
 		video = Video(video_json)
+		logging.info("Found %s", video)
 		if video.is_unread and video.time > monitor.earliest_note():
 			notify(monitor, video, snapshot)
 			shinobi_get_json(video.change_to_read)
