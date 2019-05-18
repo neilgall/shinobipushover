@@ -98,7 +98,7 @@ def shinobi_get_videos(monitor, start_datetime):
 	"""
 	Get the videos for a given monitor ID since the provided start datetime
 	"""
-	start = start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
+	start = start_datetime.astimezone(tz.gettz()).strftime("%Y-%m-%dT%H:%M:%S")
 	return shinobi_get_json(f"{INTERNAL_URL}/{API_KEY}/videos/{GROUP_KEY}/{monitor}?start={start}")
 
 
