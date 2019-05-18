@@ -1,4 +1,4 @@
-FROM frolvlad/alpine-python3
+FROM mdiazipass/alpine3.8-python3.7-bash
 
 # Install curl for debugging
 RUN apk update
@@ -19,7 +19,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY shinobipushover.py .
-RUN /usr/bin/python3 shinobipushover.py initdb
+RUN python shinobipushover.py initdb
 
 VOLUME /var/shm/streams
 EXPOSE 8000
